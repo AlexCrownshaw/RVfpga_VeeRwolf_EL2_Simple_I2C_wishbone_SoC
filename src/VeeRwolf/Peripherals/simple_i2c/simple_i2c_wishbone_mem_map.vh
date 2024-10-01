@@ -1,0 +1,6 @@
+`define CTRL_REG_ADDR 5'h00
+`define STATUS_REG_ADDR 5'h04
+`define TX_REG_ADDR 5'h08
+`define RX_REG_ADDR 5'h0C
+`define CLK_DIV_LO_REG_ADDR 5'h10
+`define CLK_DIV_HI_REG_ADDR 5'h14
