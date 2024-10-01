@@ -78,10 +78,6 @@ module simple_i2c_wishbone_slave #(
         .reg_addr_debug(reg_addr_debug)
     );
 
-    // Wishbone protocol handshake
-    wire valid_wb;
-    assign valid_wb = cyc_i && stb_i;
-
     always @(posedge clk) begin
         if (rst) begin
             ack_o <= 0;
@@ -93,7 +89,7 @@ module simple_i2c_wishbone_slave #(
         end else begin
             ack_o <= 0;  // Default acknowledge to 0
 
-            if (valid_wb && !ack_o) begin
+            if (cyc_i && stb_i) begin
                 ack_o <= 1;  // Acknowledge the transaction in the next clock
 
                 if (we_i) begin

@@ -269,6 +269,7 @@ module tb_simple_i2c_wishbone_slave();
             cyc_i = 1;
             stb_i = 1;
             we_i = 0;
+            wait (ack_o)
             @(posedge clk);
             cyc_i = 0;
             stb_i = 0;
