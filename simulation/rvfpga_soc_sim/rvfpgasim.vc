@@ -19,8 +19,8 @@
 -CFLAGS -I../../src/VeeRwolf/Peripherals/ptc
 +incdir+../../src/VeeRwolf/Peripherals/gpio
 -CFLAGS -I../../src/VeeRwolf/Peripherals/gpio
-+incdir+../../src/VeeRwolf/Peripherals/simple_i2c
--CFLAGS -I../../src/VeeRwolf/Peripherals/simple_i2c
++incdir+../../src/VeeRwolf/Peripherals/i2c
+-CFLAGS -I../../src/VeeRwolf/Peripherals/i2c
 +incdir+../../src/VeeRwolf/Interconnect/WishboneInterconnect/wb_common_1.0.3
 -CFLAGS -I../../src/VeeRwolf/Interconnect/WishboneInterconnect/wb_common_1.0.3
 +incdir+../../src/VeeRwolf/Interconnect/WishboneInterconnect
@@ -214,9 +214,9 @@ SimulationSources/rvfpgasim.v
 
 ../../src/VeeRwolf/Peripherals/ptc/ptc_top.v
 
-../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c.sv
-../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c_wishbone_slave.sv
-../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c_wishbone_mem_map.vh
+../../src/VeeRwolf/Peripherals/i2c/i2c_core.sv
+../../src/VeeRwolf/Peripherals/i2c/i2c_memory_map.sv
+../../src/VeeRwolf/Peripherals/i2c/i2c_wishbone.sv
 
 --top-module rvfpgasim
 --exe

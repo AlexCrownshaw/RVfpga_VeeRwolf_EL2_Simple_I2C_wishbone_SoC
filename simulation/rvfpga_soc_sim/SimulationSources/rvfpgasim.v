@@ -107,7 +107,12 @@ module rvfpgasim
    output wire [15:0] o_gpio,
 
    inout wire        i2c_scl,
-   inout wire        i2c_sda
+   inout wire        i2c_sda,
+
+   input wire        en_s,
+   input wire        mode_s,
+   input wire [15:0] clk_div_s,
+   input wire [7:0]  tx_s       
    )
 `endif
   ;
@@ -428,28 +433,28 @@ module rvfpgasim
    pullup(i2c_sda);
 
    // I2C Slave device
-   reg [7:0] tx_slave;
-   reg [7:0] ctrl_slave;
-   wire [7:0] rx_slave;
+   wire  [7:0]  rx_s;
+   wire  [7:0]  slave_addr_s;
+   wire  [7:0]  reg_addr_s;
+   wire  [3:0]  state_s;
+   wire  [2:0]  bit_counter_s;
 
-   simple_i2c #(
-      .SLAVE_ADDRESS(8'hAA)
-   ) slave_i2c (
+   i2c_core #(
+      .SLAVE_ADDRESS(8'h2A)
+   ) slave_inst (
       .clk(clk),
       .rst(rst),
-      .clk_div(16'h00),
-      .tx(tx_slave),
-      .rx(rx_slave),
-      .ctrl(ctrl_slave),
-      .status(),
+      .tx(tx_s),
+      .rx(rx_s),
+      .slave_addr(slave_addr_s),
+      .reg_addr(reg_addr_s),
+      .clk_div(clk_div_s),
+      .en(en_s),
+      .mode(mode_s),
       .scl(i2c_scl),
-      .sda(i2c_sda)
+      .sda(i2c_sda),
+      .state_debug(state_s),
+      .bit_counter_debug(bit_counter_s)
    );
-
-   initial begin
-      if (!rst) begin
-         ctrl_slave = 8'h1;
-      end
-   end
 
 endmodule

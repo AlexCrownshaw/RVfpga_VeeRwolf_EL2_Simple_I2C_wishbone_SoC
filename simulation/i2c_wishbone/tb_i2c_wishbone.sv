@@ -1,24 +1,24 @@
-`include "../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c_wishbone_mem_map.vh"
+`include "../../src/VeeRwolf/Peripherals/i2c/i2c_wishbone.sv"
 
 
-module tb_simple_i2c_wishbone_slave();
+module tb_i2c_wishbone();
 
     // Shared constant parameters
     localparam SLAVE_ADDRESS = 7'h2A;
-    localparam CLK_DIV = 16'h00;
+    localparam CLK_DIV_400KHZ = 16'h3d;  // (400kHz)
 
     // Clock and reset
     reg clk;
     reg rst;
 
     // Wishbone signals
-    reg [5:0] adr_i;
-    reg [7:0] dat_i;
+    reg  [5:0] adr_i;
+    reg  [7:0] dat_i;
     wire [7:0] dat_o;
-    reg we_i;
-    reg stb_i;
-    reg cyc_i;
-    wire ack_o;
+    reg        we_i;
+    reg        stb_i;
+    reg        cyc_i;
+    wire       ack_o;
 
     // I2C bus signals
     wire scl;
@@ -27,27 +27,12 @@ module tb_simple_i2c_wishbone_slave();
     pullup(scl);    // Simulate weak pullup resistors
     pullup(sda);
 
-    // I2C wishbone inteconnect device-under-test
-    wire [3:0] state_debug;
-    wire [2:0] bit_counter_debug;
-    wire scl_out_debug;
-    wire sda_out_debug; 
-    wire [7:0] tx_debug;
-    wire [7:0] rx_debug;
-    wire [7:0] ctrl_debug;
-    wire [7:0] status_debug;
-    wire en_i2c_debug;
-    wire mode_i2c_debug;
-    wire start_i2c_debug;
-    wire stop_i2c_debug;
-    wire rw_i2c_debug; 
-    wire [7:0] master_slave_addr_debug; 
-    wire [7:0] master_reg_addr_debug;
-    wire [15:0] clk_div_debug;
-    wire [7:0] clk_div_lo_debug;
-    wire [7:0] clk_div_hi_debug;
+    // Master debug signals
+    wire [3:0] master_state;
+    wire [2:0] master_bit_counter;
 
-    simple_i2c_wishbone_slave dut (
+    // I2C wishbone instance (DUT)
+    i2c_wishbone dut (
         .clk(clk),
         .rst(rst),
         .adr_i(adr_i),
@@ -59,68 +44,8 @@ module tb_simple_i2c_wishbone_slave();
         .ack_o(ack_o),
         .scl(scl),
         .sda(sda),
-        .master_state_debug(state_debug),
-        .bit_counter_debug(bit_counter_debug),
-        .clk_div_debug(clk_div_debug),
-        .clk_div_lo_debug(clk_div_lo_debug),
-        .clk_div_hi_debug(clk_div_hi_debug),
-        .tx_debug(tx_debug),
-        .rx_debug(rx_debug),
-        .ctrl_debug(ctrl_debug),
-        .status_debug(status_debug),
-        .en_i2c_debug(en_i2c_debug),
-        .mode_i2c_debug(mode_i2c_debug),
-        .start_i2c_debug(start_i2c_debug),
-        .stop_i2c_debug(stop_i2c_debug),
-        .rw_i2c_debug(rw_i2c_debug),
-        .scl_out_i2c_debug(scl_out_debug),
-        .sda_out_i2c_debug(sda_out_debug),
-        .slave_addr_debug(master_slave_addr_debug),
-        .reg_addr_debug(master_reg_addr_debug)
-    );
-
-    // Slave I2C device
-    wire [3:0] slave_state_debug;
-    wire [2:0] slave_bit_counter_debug; 
-    wire scl_out_slave_debug;
-    wire sda_out_slave_debug;
-    reg [7:0] tx_slave;
-    wire [7:0] rx_slave;
-    reg [7:0] ctrl_slave;
-    wire [7:0] status_slave;
-
-    wire en_slave_debug;
-    wire mode_slave_debug;
-    wire start_slave_debug;
-    wire stop_slave_debug;
-    wire rw_slave_debug;
-    wire [7:0] slave_slave_addr_debug;
-    wire [7:0] slave_reg_addr_debug;
-
-
-    simple_i2c #(
-        .SLAVE_ADDRESS(SLAVE_ADDRESS)
-    ) i2c_slave (
-        .clk(clk),
-        .rst(rst),
-        .clk_div(CLK_DIV),
-        .tx(tx_slave),
-        .rx(rx_slave),
-        .ctrl(ctrl_slave),
-        .status(status_slave),
-        .scl(scl),
-        .sda(sda),
-        .en_debug(en_slave_debug),
-        .mode_debug(mode_slave_debug),
-        .start_debug(start_slave_debug),
-        .stop_debug(stop_slave_debug),
-        .rw_debug(rw_slave_debug),
-        .slave_state_debug(slave_state_debug),
-        .slave_bit_counter_debug(slave_bit_counter_debug),
-        .scl_out_debug(scl_out_slave_debug),
-        .sda_out_debug(sda_out_slave_debug),
-        .slave_addr_debug(slave_slave_addr_debug),
-        .reg_addr_debug(slave_reg_addr_debug)
+        .state_debug(master_state),
+        .bit_counter_debug(master_bit_counter)
     );
 
     // I2C control register components
@@ -134,7 +59,6 @@ module tb_simple_i2c_wishbone_slave();
     reg ld_reg_addr;
 
     always @ (*) begin
-        // Assign the control register bits
         ctrl[0] = en;              // Enable
         ctrl[1] = mode;            // Mode
         ctrl[2] = start;           // Start signal
@@ -149,11 +73,46 @@ module tb_simple_i2c_wishbone_slave();
     reg [7:0] status;
     wire busy;
     wire done;
-    wire no_ack;
+    wire nack;
 
     assign busy = status[0];
     assign done = status[1];
-    assign no_ack = status[2];
+    assign nack = status[2];
+
+    // Slave I2C device
+    reg  [7:0]  tx_slave;
+    reg  [7:0]  rx_slave;
+    wire [7:0]  rx_slave_addr;  // Slave address recived by the slave from the master
+    wire [7:0]  rx_reg_addr;    // Register address recived by the slave from the master
+    reg  [15:0] clk_div_slave;        
+    reg         en_slave;
+    reg         mode_slave;
+
+    // Slave debug signals
+    wire [3:0] slave_state;
+    wire [2:0] slave_bit_counter;
+    wire slave_scl_out;
+    wire slave_sda_out;
+
+    i2c_core #(
+        .SLAVE_ADDRESS(SLAVE_ADDRESS)
+    ) slave_inst (
+        .clk(clk),
+        .rst(rst),
+        .tx(tx_slave),
+        .rx(rx_slave),
+        .slave_addr(rx_slave_addr),
+        .reg_addr(rx_reg_addr),
+        .clk_div(clk_div_slave),
+        .en(en_slave),
+        .mode(mode_slave),
+        .scl(scl),
+        .sda(sda),
+        .state_debug(slave_state),
+        .bit_counter_debug(slave_bit_counter),
+        .scl_out_debug(slave_scl_out),
+        .sda_out_debug(slave_sda_out)
+    );
 
     // Clock generation
     always begin
@@ -164,10 +123,9 @@ module tb_simple_i2c_wishbone_slave();
     reg [7:0] cov_slave_addr;
     reg [7:0] cov_reg_addr;
     reg [7:0] cov_data;
-    reg       cov_no_ack;
+    reg       cov_nack;
 
     covergroup i2c_coverage;
-        // Coverpoints will sample values passed during the sample() call
         cp_slave_addr: coverpoint cov_slave_addr {
             bins valid_addr = {SLAVE_ADDRESS};   // Track valid slave address
             bins invalid_addr = default;         // Track any invalid address
@@ -181,7 +139,7 @@ module tb_simple_i2c_wishbone_slave();
             bins all_data = {['h00:'hFF]};       // Track all data values
         }
 
-        cp_no_ack: coverpoint cov_no_ack {
+        cp_nack: coverpoint cov_nack {
             bins ack_received = {0};             // Track successful ACK
             bins nack_received = {1};            // Track NACKs
         }
@@ -220,7 +178,8 @@ module tb_simple_i2c_wishbone_slave();
 
         // Init slave inputs
         tx_slave = 8'b0;
-        ctrl_slave = 8'b0;
+        en_slave = 0;
+        mode_slave = 0;
 
         // Remove reset
         #20 rst = 0;
@@ -229,9 +188,13 @@ module tb_simple_i2c_wishbone_slave();
         en = 1;
         mode = 1;
         wb_write(`CTRL_REG_ADDR, ctrl);
+        wb_write(`CLK_DIV_LO_REG_ADDR, CLK_DIV_400KHZ[7:0]);
+        wb_write(`CLK_DIV_HI_REG_ADDR, CLK_DIV_400KHZ[15:8]);
 
         // Init I2C slave
-        ctrl_slave = 8'b1;
+        en_slave = 1;
+        mode_slave = 0;
+        clk_div_slave = CLK_DIV_400KHZ;
 
         // Run regression tests
         test_valid_i2c_write(SLAVE_ADDRESS, 8'h68, 8'hAA);
@@ -239,7 +202,7 @@ module tb_simple_i2c_wishbone_slave();
         test_invalid_i2c_slave_address(8'h00, 8'h68, 8'hAA);
 
         // End simulation after some time
-        #2000;
+        #200;
         $stop;  // Stop the simulation
     end
 
@@ -413,20 +376,20 @@ module tb_simple_i2c_wishbone_slave();
             wait(done == 1);  // Wait for operation to complete
 
             // Assertions to verify the write operation
-            if (slave_slave_addr_debug[7:1] !== slave_addr) begin
-                $display("Test failed: Slave address mismatch! Expected: %h, Actual: %h", slave_addr, slave_slave_addr_debug[7:1]);
+            if (rx_slave_addr[7:1] !== slave_addr) begin
+                $display("Test failed: Slave address mismatch! Expected: %h, Actual: %h", slave_addr, rx_slave[7:1]);
                 $fatal;
             end
-            if (slave_reg_addr_debug !== reg_addr) begin
-                $display("Test failed: Register address mismatch! Expected: %h, Actual: %h", reg_addr, slave_reg_addr_debug);
+            if (rx_reg_addr !== reg_addr) begin
+                $display("Test failed: Register address mismatch! Expected: %h, Actual: %h", reg_addr, rx_reg_addr);
                 $fatal;
             end
             if (rx_slave !== data) begin
                 $display("Test failed: Data mismatch in RX register! Expected: %h, Actual: %h", data, rx_slave);
                 $fatal;
             end
-            if (no_ack !== 0) begin
-                $display("Test failed: Unexpected NACK received! Expected: 0, Actual: %h", no_ack);
+            if (nack !== 0) begin
+                $display("Test failed: Unexpected NACK received! Expected: 0, Actual: %h", nack);
                 $fatal;
             end
 
@@ -434,7 +397,7 @@ module tb_simple_i2c_wishbone_slave();
             cov_slave_addr = slave_addr;
             cov_reg_addr = reg_addr;
             cov_data = data;
-            cov_no_ack = no_ack;
+            cov_nack = nack;
             i2c_cov.sample();
 
             $display("TEST PASSED: Valid I2C Write successful.\n");
@@ -455,20 +418,20 @@ module tb_simple_i2c_wishbone_slave();
             i2c_read(slave_addr, reg_addr);
             wait(done == 1);  // Wait for operation to complete
 
-            if (slave_slave_addr_debug[7:1] !== slave_addr) begin
-                $display("Test failed: Slave address mismatch! Expected: %h, Actual: %h", slave_addr, slave_slave_addr_debug[7:1]);
+            if (rx_slave_addr[7:1] !== slave_addr) begin
+                $display("Test failed: Slave address mismatch! Expected: %h, Actual: %h", slave_addr, rx_slave_addr[7:1]);
                 $fatal;
             end
-            if (slave_reg_addr_debug !== reg_addr) begin
-                $display("Test failed: Register address mismatch! Expected: %h, Actual: %h", reg_addr, slave_reg_addr_debug);
+            if (rx_reg_addr !== reg_addr) begin
+                $display("Test failed: Register address mismatch! Expected: %h, Actual: %h", reg_addr, rx_reg_addr);
                 $fatal;
             end
             if (dat_o !== data) begin
                 $display("Test failed: Data mismatch in RX register! Expected: %h, Actual: %h", data, dat_o);
                 $fatal;
             end
-            if (no_ack !== 0) begin
-                $display("Test failed: Unexpected NACK received! Expected: 0, Actual: %h", no_ack);
+            if (nack !== 0) begin
+                $display("Test failed: Unexpected NACK received! Expected: 0, Actual: %h", nack);
                 $fatal;
             end
 
@@ -476,7 +439,7 @@ module tb_simple_i2c_wishbone_slave();
             cov_slave_addr = slave_addr;
             cov_reg_addr = reg_addr;
             cov_data = data;
-            cov_no_ack = no_ack;
+            cov_nack = nack;
             i2c_cov.sample();
             
             $display("TEST PASSED: Valid I2C Read successful.\n");
@@ -495,9 +458,9 @@ module tb_simple_i2c_wishbone_slave();
             i2c_write(invalid_slave_addr, reg_addr, data);
             wait(done == 1);  // Wait for operation to complete
 
-            // Expect a NACK (no_ack should be set)
-            if (no_ack !== 1) begin
-                $display("Test failed: Expected NACK not received for invalid slave address! Expected: 1, Actual: %h", no_ack);
+            // Expect a NACK (nack should be set)
+            if (nack !== 1) begin
+                $display("Test failed: Expected NACK not received for invalid slave address! Expected: 1, Actual: %h", nack);
                 $fatal;
             end
 
@@ -505,7 +468,7 @@ module tb_simple_i2c_wishbone_slave();
             cov_slave_addr = invalid_slave_addr;
             cov_reg_addr = reg_addr;
             cov_data = data;
-            cov_no_ack = no_ack;
+            cov_nack = nack;
             i2c_cov.sample();
 
             $display("TEST PASSED: NACK correctly received for invalid slave address.\n");

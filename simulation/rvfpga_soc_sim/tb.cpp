@@ -97,6 +97,14 @@ void do_uart(uart_context_t *context, bool rx) {
   }
 }
 
+void i2c_slave_init(Vrvfpgasim* top)
+{
+  top->en_s = 1;
+  top->mode_s = 0;
+  top->clk_div_s = 0x3d;
+  top->tx_s = 0xAA;
+}
+
 int main(int argc, char **argv, char **env)
 {
   Verilated::commandArgs(argc, argv);
@@ -139,6 +147,7 @@ int main(int argc, char **argv, char **env)
     if (main_time == 100) {
       printf("Releasing reset\n");
       top->rst = 0;
+      i2c_slave_init(top);
     }
     if (main_time == 200)
       top->i_jtag_trst_n = true;
