@@ -106,9 +106,6 @@ module rvfpgasim
    output wire 	      o_uart_tx,
    output wire [15:0] o_gpio,
 
-   inout wire        i2c_scl,
-   inout wire        i2c_sda,
-
    input wire        en_s,
    input wire        mode_s,
    input wire [15:0] clk_div_s,
@@ -299,6 +296,12 @@ module rvfpgasim
       .reg_wr_en      (dmi_reg_wr_en),
       .dmi_hard_reset (dmi_hard_reset)); 
 
+   wire i2c_scl;
+   wire i2c_sda;
+
+   pullup(i2c_scl);
+   pullup(i2c_sda);
+
    veerwolf_core
      #(.bootrom_file (bootrom_file),
        .clk_freq_hz (32'd12_500_000))
@@ -427,10 +430,6 @@ module rvfpgasim
       .i2c_scl             (i2c_scl),
       .i2c_sda             (i2c_sda)
     );
-
-   // I2C pullups
-   pullup(i2c_scl);
-   pullup(i2c_sda);
 
    // I2C Slave device
    wire  [7:0]  rx_s;
