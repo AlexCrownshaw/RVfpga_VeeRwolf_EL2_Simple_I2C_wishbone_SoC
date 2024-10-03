@@ -1,99 +1,62 @@
-module simple_i2c #(
+//  i2c_core.sv
+//
+// clk_div = f_in / (f_out * 2) - 1
+
+
+module i2c_core #(
     parameter SLAVE_ADDRESS = 7'h50 
     ) 
     (
-    input wire clk,         
-    input wire rst,
-    input wire [15:0] clk_div,
-    input reg [7:0] tx,     // Tx Buffer or Address buffer 
-    output reg [7:0] rx,    // Rx Buffer
-    input wire [7:0] ctrl,
-    output reg [7:0] status,
-    inout scl,
-    inout sda
+    input wire        clk,         
+    input wire        rst,
 
-    // Debug ports
-    ,output wire en_debug,
-    output wire mode_debug,
-    output wire start_debug,
-    output wire stop_debug,
-    output wire rw_debug,
-    output wire slave_rw_debug,
-    output wire ld_slave_addr_debug,
-    output wire ld_reg_addr_debug,
-    output wire [3:0] master_state_debug,
-    output wire [3:0] slave_state_debug,
-    output wire scl_clk_debug,
+    // Data ports
+    input  reg  [7:0]  tx,            // Data to transmit
+    output reg  [7:0]  rx,            // Recieved data
+    inout  wire [7:0]  slave_addr,    // Master = Target slave device address / Slave = Recieved slave address
+    inout  wire [7:0]  reg_addr,      // Master = Target register address / Slave = Recieved register address
+    input  wire [15:0] clk_div,       // SCL clock divider
+
+    // Control signals
+    input wire        en,            // Enable bit
+    input wire        mode,          // Master (1) or Slave (0)
+    input wire        start,         // Start transaction
+    input wire        stop,          // Stop transaction
+    input wire        rw,            // Read/write bit (write = 0 / read = 1)
+
+    // Status signals
+    output reg        busy,          // Signals transaction in progress
+    output reg        done,          // Signals transaction complete
+    output reg        nack,          // Signals ack not recieved from slave
+
+    // I2C signals
+    inout             scl,           // I2C clock line
+    inout             sda,           // I2C data line
+
+    // Debug signals
+    output wire [3:0] state_debug,
     output wire [2:0] bit_counter_debug,
-    output wire [2:0] slave_bit_counter_debug,
-    output wire scl_out_debug,
-    output wire sda_out_debug,
-    output wire [7:0] slave_addr_debug,
-    output wire [7:0] reg_addr_debug
+    output wire       scl_out_debug,
+    output wire       sda_out_debug
     );
 
-    // Control register signals
-    wire en;        // Enable bit
-    wire mode;      // Master (1) or Slave (0)
-    wire start;     // Start transaction
-    wire stop;      // Stop transaction
-    wire rw;        // Read/write bit (write = 0 / read = 1)
-    wire ld_slave_addr;   // Load tx -> addr when set
-    wire ld_reg_addr;
+    // Clock Divider for SCL generation (only for Master)
+    reg [15:0] clk_div_counter;    // Counter for the clock divider
+    reg scl_clk;  // Divided clock signal for SCL (used by master only)
 
-    assign en = ctrl[0];
-    assign mode = ctrl[1];
-    assign start = ctrl[2];
-    assign stop = ctrl[3];
-    assign rw = ctrl[4];
-    assign ld_slave_addr = ctrl[5];
-    assign ld_reg_addr = ctrl[6];
-
-    // Status register
-    reg busy;       // Set during transaction FSM
-    reg done;       // Transaction complete
-    reg no_ack;     // No acknowledge recieved
-
-    always @ (posedge clk) begin
+    always @(posedge clk or posedge rst) begin
         if (rst) begin
-            busy <= 1'b0;
-            done <= 1'b0;
-            no_ack <= 1'b0;
-        end
-    end
-
-    assign status[0] = busy;
-    assign status[1] = done;
-    assign status[2] = no_ack;
-    assign status[7:3] = 5'b0;
-
-    // Slave Address register
-    reg [7:0] slave_addr;
-    always @ (posedge clk) begin
-        if (rst) begin
-            slave_addr <= 8'b0;
+            clk_div_counter <= 16'b0;
+            scl_clk <= 1'b0;
         end else begin
-            if (ld_slave_addr) begin
-                slave_addr <= {tx[6:0], rw}; // Set read/write bit at the end of the address
+            if (clk_div_counter >= clk_div) begin
+                clk_div_counter <= 16'b0;
+                scl_clk <= ~scl_clk;
+            end else begin
+                clk_div_counter <= clk_div_counter + 1;
             end
         end
     end
-    
-    // Register address register
-    reg [7:0] reg_addr;
-    always @ (posedge clk) begin
-        if (rst) begin
-            reg_addr <= 8'b0;
-        end else begin
-            if (ld_reg_addr) begin
-                reg_addr <= tx;
-            end
-        end
-    end
-
-    // Slave read/write
-    wire slave_rw;
-    assign slave_rw = slave_addr[0];
 
     // I2C signals
     reg sda_out;
@@ -102,28 +65,31 @@ module simple_i2c #(
     wire sda_in;  // SDA input from the shared bus
     assign sda_in = sda;  // Read SDA state
 
-    // Clock Divider for SCL generation (only for Master)
-    reg [15:0] clk_div_counter;    // Counter for the clock divider
-    reg scl_clk;  // Divided clock signal for SCL (used by master only)
-
-    always @ (posedge clk or posedge rst) begin
-        if (rst) begin
-            clk_div_counter <= 16'b0;
-            scl_clk <= 1'b0;
-        end else begin
-            if (clk_div_counter == clk_div) begin
-                scl_clk <= ~scl_clk;  // Toggle SCL clock
-                clk_div_counter <= 16'b0;
-            end else begin
-                clk_div_counter <= clk_div_counter + 1;
-            end
-        end
-    end
-
     assign sda = (sda_out == 1'b0) ? 1'b0 : 1'bz;  // Open drain for SDA
     assign scl = (mode == 1'b1 && scl_clk == 1'b0) ? 1'b0 : 1'bz;  // Open drain for SCL, driven by master only
 
-     // Master FSM (Master only drives SCL)
+    // Bi-directional address signals
+    reg [7:0] rx_slave_addr;
+    reg [7:0] rx_reg_addr;
+
+    assign slave_addr = (mode == 0) ? rx_slave_addr : 8'bz;
+    assign reg_addr = (mode == 0) ? rx_reg_addr : 8'bz;
+
+    // I/O reset condition
+    always @ (posedge clk or posedge rst) begin
+        if (rst) begin
+            busy <= 0;
+            done <= 0;
+            nack <= 0;
+            rx <= 8'b0;
+            scl_out <= 1'b1;  // Release SCL
+            sda_out <= 1'b1;  // Release SDA
+            rx_slave_addr <= 8'b0;
+            rx_reg_addr <= 8'b0;
+        end
+    end
+
+    // Master FSM
     typedef enum reg [3:0] {
         IDLE,
         START_CONDITION,
@@ -207,11 +173,7 @@ module simple_i2c #(
 
     always @(negedge scl or posedge rst) begin
         if (rst) begin
-            busy <= 0;
             bit_counter <= 0;
-            scl_out <= 1'b1;  // Release SCL
-            sda_out <= 1'b1;  // Release SDA
-            rx <= 8'b0;
         end else begin
             case (state)
                 SEND_ADDRESS: begin
@@ -231,44 +193,42 @@ module simple_i2c #(
     end
 
     always @ (posedge scl) begin
-        if (rst) begin
-        end else begin
-            case (state)
-                IDLE: begin
-                    busy <= 0;
-                    if (start) begin
-                        busy <= 1;
-                        done <= 0;
-                        no_ack <= 0;
-                        sda_out <= 1'b0;  // Drive SDA low to signal start
-                    end
+        case (state)
+            IDLE: begin
+                busy <= 0;
+                if (start) begin
+                    busy <= 1;
+                    done <= 0;
+                    nack <= 0;
+                    sda_out <= 1'b0;  // Drive SDA low to signal start
                 end
-                SETUP_ACK_ADDRESS: begin
-                    sda_out <= 1;
-                end
-                ACK_ADDRESS: begin
-                    if (sda_in != 1'b0) no_ack <= 1;                
-                end
-                SETUP_ACK_REGISTER: begin
-                    sda_out <= 1;
-                end
-                ACK_REGISTER: begin
-                    if (sda_in != 1'b0) no_ack <= 1;                
-                end
-                READ: begin
-                    sda_out <= 1;
-                    rx[7 - bit_counter] <= sda_in;  // Receive data from SDA
-                    bit_counter <= bit_counter + 1;
-                end
-                SETUP_STOP_CONDITION: begin
-                    sda_out <= 1'b1;  // Release SDA to signal stop
-                end
-                STOP_CONDITION: begin
-                    sda_out <= 1'b1;  // Release SDA to signal stop
-                    done <= 1;
-                end
-            endcase
-        end
+            end
+            SETUP_ACK_ADDRESS: begin
+                sda_out <= 1;
+            end
+            ACK_ADDRESS: begin
+                if (sda_in != 1'b0) nack <= 1;                
+            end
+            SETUP_ACK_REGISTER: begin
+                sda_out <= 1;
+            end
+            ACK_REGISTER: begin
+                if (sda_in != 1'b0) nack <= 1;                
+            end
+            READ: begin
+                sda_out <= 1;
+                rx[7 - bit_counter] <= sda_in;  // Receive data from SDA
+                bit_counter <= bit_counter + 1;
+            end
+            SETUP_STOP_CONDITION: begin
+                sda_out <= 1'b1;  // Release SDA to signal stop
+            end
+            STOP_CONDITION: begin
+                sda_out <= 1'b1;  // Release SDA to signal stop
+                done <= 1;
+                busy <= 0;
+            end
+        endcase
     end
 
     // Slave FSM
@@ -288,13 +248,13 @@ module simple_i2c #(
 
     i2c_slave_state_t slave_state, next_slave_state;
     reg [2:0] slave_bit_counter;
+    wire slave_rw;
+    assign slave_rw = slave_addr[0];
 
     always @(posedge scl or posedge rst) begin
         if (rst) begin
             slave_state <= SLAVE_IDLE;
             slave_bit_counter <= 0;
-            sda_out <= 1'b1; // Release SDA in slave mode
-            rx <= 8'b0;
         end else if (en && !mode) begin  // Only run in slave mode
             slave_state <= next_slave_state;  // Transition to the next state on clock edge
         end else
@@ -363,14 +323,13 @@ module simple_i2c #(
     always @(posedge scl or posedge rst) begin
         if (rst) begin
             slave_bit_counter <= 0;
-            sda_out <= 1'b1;  // Release SDA in slave mode
         end else if (en && !mode) begin  // Only run in slave mode
             case (slave_state)
                 SLAVE_IDLE: begin
                     // Wait for the start condition, no actions needed here
                 end
                 SLAVE_LISTEN_ADDRESS: begin
-                    slave_addr[7 - slave_bit_counter] <= sda_in;
+                    rx_slave_addr[7 - slave_bit_counter] <= sda_in;
                     slave_bit_counter <= slave_bit_counter + 1;
                 end
                 SLAVE_SETUP_ACK: begin
@@ -382,7 +341,7 @@ module simple_i2c #(
                     sda_out <= 1; // Release sda
                 end
                 SLAVE_LISTEN_REGISTER: begin
-                    reg_addr[7 - slave_bit_counter] <= sda_in;  // Capture register address
+                    rx_reg_addr[7 - slave_bit_counter] <= sda_in;  // Capture register address
                     slave_bit_counter <= slave_bit_counter + 1;
                 end
                 SLAVE_SETUP_ACK_REGISTER: begin
@@ -399,46 +358,25 @@ module simple_i2c #(
                     sda_out <= 1; // Release sda
                 end
                 SLAVE_WAIT_STOP: begin
-                    // if (scl == 1 && sda == 1) begin
-                    //     sda_out <= 1'b1;  // Release SDA after stop condition
-                    //     slave_bit_counter <= 0;
-                    // end
+                    // Dont need to do anything here
                 end
             endcase
         end
     end
 
     always @ (negedge scl or posedge rst) begin
-        if (rst) begin
-            sda_out <= 1'b1;  // Ensure SDA is released after reset
-            slave_bit_counter <= 0;  // Reset the bit counter
-        end else begin
-            case (slave_state)
-                SLAVE_READ: begin
-                    sda_out <= tx[7 - slave_bit_counter];  // Write data to master
-                    slave_bit_counter <= slave_bit_counter + 1;
-                end
-            endcase
-        end
+        case (slave_state)
+            SLAVE_READ: begin
+                sda_out <= tx[7 - slave_bit_counter];  // Write data to master
+                slave_bit_counter <= slave_bit_counter + 1;
+            end
+        endcase
     end
 
-    // Debug signal assignments
-    assign en_debug = en;
-    assign mode_debug = mode;
-    assign start_debug = start;
-    assign stop_debug = stop;
-    assign rw_debug = rw;
-    assign slave_rw_debug = slave_rw;
-    assign ld_slave_addr_debug = ld_slave_addr;
-    assign ld_reg_addr_debug = ld_reg_addr;
-    assign master_state_debug = state;
-    assign slave_state_debug = slave_state;
-    assign scl_clk_debug = scl_clk;
-    assign bit_counter_debug = bit_counter;
-    assign slave_bit_counter_debug = slave_bit_counter;
+    // Assign debug signals
+    assign state_debug = (mode == 1) ? state : slave_state;
+    assign bit_counter_debug = (mode == 1) ? bit_counter : slave_bit_counter;
     assign scl_out_debug = scl_out;
     assign sda_out_debug = sda_out;
-    assign slave_addr_debug = slave_addr;
-    assign reg_addr_debug = reg_addr;
 
 endmodule

@@ -9,17 +9,17 @@ REPORT_DIR="./coverage_report"
 REPORT_FORMAT="html"
 
 # Compile the Verilog testbench and design files with functional coverage enabled
-xvlog --sv tb_simple_i2c_wishbone_slave.sv \
-      ../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c.sv \
-      ../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c_wishbone_slave.sv \
-      ../../src/VeeRwolf/Peripherals/simple_i2c/simple_i2c_wishbone_mem_map.vh
+xvlog --sv tb_i2c_wishbone.sv \
+      ../../src/VeeRwolf/Peripherals/i2c/i2c_core.sv \
+      ../../src/VeeRwolf/Peripherals/i2c/i2c_memory_map.sv \
+      ../../src/VeeRwolf/Peripherals/i2c/i2c_wishbone.sv
 
 # Elaborate the design with coverage database enabled
-xelab tb_simple_i2c_wishbone_slave -debug typical --timescale 1ns/1ps \
-      -s simple_i2c_wishbone_slave_sim -cov_db_dir $COV_DB_DIR -cov_db_name $COV_DB_NAME -R
+xelab tb_i2c_wishbone -debug typical --timescale 1ns/1ps \
+      -s i2c_wishbone -cov_db_dir $COV_DB_DIR -cov_db_name $COV_DB_NAME -R
 
 # Simulate the design and collect functional coverage
-xsim simple_i2c_wishbone_slave_sim --tclbatch run_commands.tcl --wdb tb_simple_i2c_wishbone_slave.wdb --log sim_log.txt
+xsim i2c_wishbone --tclbatch run_commands.tcl --wdb tb_i2c_wishbone.wdb --log sim_log.txt --coverage functional
 
 # Generate functional coverage report in HTML format
 xcrg -dir $COV_DB_DIR -db_name $COV_DB_NAME -report_dir $REPORT_DIR -report_format $REPORT_FORMAT

@@ -471,7 +471,7 @@ module veerwolf_core
       .mosi_o (o_accel_mosi),
       .miso_i (i_accel_miso));
       
-    simple_i2c_wishbone_slave i2c (
+   i2c_wishbone i2c (
         .clk(clk),
         .rst(wb_rst),
         .adr_i(wb_m2s_i2c_adr[5:0]),
