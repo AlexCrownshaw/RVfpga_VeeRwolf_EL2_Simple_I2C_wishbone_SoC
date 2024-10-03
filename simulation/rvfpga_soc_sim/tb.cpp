@@ -99,10 +99,10 @@ void do_uart(uart_context_t *context, bool rx) {
 
 void i2c_slave_init(Vrvfpgasim* top)
 {
-  top->en_s = 1;
-  top->mode_s = 0;
-  top->clk_div_s = 0x3d;
-  top->tx_s = 0xAA;
+  top->en_s = 1;          // Set slave enable bit
+  top->mode_s = 0;        // Set slave mode
+  top->clk_div_s = 0x3d;  // Set f_clk = 400kHz
+  top->tx_s = 0xAA;       // Set data to read using master
 }
 
 int main(int argc, char **argv, char **env)

@@ -12,7 +12,7 @@ module i2c_wishbone #(
     (
     input wire           clk,           // Clock
     input wire           rst,           // Reset
-    input wire  [5:0]    adr_i,         // Address bus
+    input wire  [4:0]    adr_i,         // Address bus
     input wire  [7:0]    dat_i,         // Data input (from master)
     output reg  [7:0]    dat_o,         // Data output (to master)
     input wire           we_i,          // Write Enable

@@ -364,7 +364,7 @@ module i2c_core #(
         end
     end
 
-    always @ (negedge scl or posedge rst) begin
+    always @ (negedge scl) begin
         case (slave_state)
             SLAVE_READ: begin
                 sda_out <= tx[7 - slave_bit_counter];  // Write data to master

@@ -472,19 +472,19 @@ module veerwolf_core
       .miso_i (i_accel_miso));
       
    i2c_wishbone i2c (
-        .clk(clk),
-        .rst(wb_rst),
-        .adr_i(wb_m2s_i2c_adr[5:0]),
-        .dat_i(wb_m2s_i2c_dat[7:0]),
-        .dat_o(wb_s2m_i2c_dat[7:0]),
-        .we_i(wb_m2s_i2c_we),
-        .stb_i(wb_m2s_i2c_stb),
-        .cyc_i(wb_m2s_i2c_cyc),
-        .ack_o(wb_s2m_i2c_ack),
-        
-        .scl(i2c_scl),
-        .sda(i2c_sda)
-    );
+      .clk(clk),
+      .rst(wb_rst),
+      .adr_i(wb_m2s_i2c_adr[4:0]),
+      .dat_i(wb_m2s_i2c_dat[7:0]),
+      .dat_o(wb_s2m_i2c_dat[7:0]),
+      .we_i(wb_m2s_i2c_we),
+      .stb_i(wb_m2s_i2c_stb),
+      .cyc_i(wb_m2s_i2c_cyc),
+      .ack_o(wb_s2m_i2c_ack),
+      
+      .scl(i2c_scl),
+      .sda(i2c_sda)
+   );
 
    wire [7:0] 		       uart_rdt;
    assign wb_s2m_uart_dat = {24'd0, uart_rdt};
